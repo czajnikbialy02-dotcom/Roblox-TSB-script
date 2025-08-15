@@ -8,8 +8,8 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 
--- Funkcja wyłączająca kolizje w całej postaci
-local function disableCharacterCollision(character)
+-- Funkcja wyłączająca kolizje w postaci innego gracza
+local function disableCollision(character)
     for _, part in ipairs(character:GetDescendants()) do
         if part:IsA("BasePart") then
             part.CanCollide = false
@@ -17,40 +17,40 @@ local function disableCharacterCollision(character)
     end
 end
 
--- Wyłącz dla swojej postaci
-LocalPlayer.CharacterAdded:Connect(disableCharacterCollision)
-if LocalPlayer.Character then
-    disableCharacterCollision(LocalPlayer.Character)
-end
-
--- Wyłącz dla istniejących graczy
+-- Obsługa istniejących graczy
 for _, plr in ipairs(Players:GetPlayers()) do
-    if plr ~= LocalPlayer then
-        if plr.Character then
-            disableCharacterCollision(plr.Character)
-        end
-        plr.CharacterAdded:Connect(disableCharacterCollision)
+    if plr ~= LocalPlayer and plr.Character then
+        disableCollision(plr.Character)
     end
 end
 
--- Gdy nowy gracz dołączy
+-- Nowi gracze
 Players.PlayerAdded:Connect(function(plr)
     if plr ~= LocalPlayer then
-        plr.CharacterAdded:Connect(disableCharacterCollision)
+        plr.CharacterAdded:Connect(function(char)
+            disableCollision(char)
+        end)
     end
 end)
 
--- Totalny bruteforce — co klatkę wyłącza kolizje
+-- Gdy inni gracze się respawnują
+for _, plr in ipairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        plr.CharacterAdded:Connect(function(char)
+            disableCollision(char)
+        end)
+    end
+end
+
+-- Bruteforce — co klatkę pilnuje, żeby inni gracze nie mieli kolizji
 RunService.Stepped:Connect(function()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr.Character and plr ~= LocalPlayer then
-            disableCharacterCollision(plr.Character)
+        if plr ~= LocalPlayer and plr.Character then
+            disableCollision(plr.Character)
         end
     end
-    if LocalPlayer.Character then
-        disableCharacterCollision(LocalPlayer.Character)
-    end
 end)
+
 
 
 local Players = game:GetService('Players')
