@@ -4,6 +4,55 @@ if game.PlaceId ~= TARGET_GAME_ID then
     return
 end
 
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local LocalPlayer = Players.LocalPlayer
+
+-- Funkcja wyłączająca kolizje w całej postaci
+local function disableCharacterCollision(character)
+    for _, part in ipairs(character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = false
+        end
+    end
+end
+
+-- Wyłącz dla swojej postaci
+LocalPlayer.CharacterAdded:Connect(disableCharacterCollision)
+if LocalPlayer.Character then
+    disableCharacterCollision(LocalPlayer.Character)
+end
+
+-- Wyłącz dla istniejących graczy
+for _, plr in ipairs(Players:GetPlayers()) do
+    if plr ~= LocalPlayer then
+        if plr.Character then
+            disableCharacterCollision(plr.Character)
+        end
+        plr.CharacterAdded:Connect(disableCharacterCollision)
+    end
+end
+
+-- Gdy nowy gracz dołączy
+Players.PlayerAdded:Connect(function(plr)
+    if plr ~= LocalPlayer then
+        plr.CharacterAdded:Connect(disableCharacterCollision)
+    end
+end)
+
+-- Totalny bruteforce — co klatkę wyłącza kolizje
+RunService.Stepped:Connect(function()
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Character and plr ~= LocalPlayer then
+            disableCharacterCollision(plr.Character)
+        end
+    end
+    if LocalPlayer.Character then
+        disableCharacterCollision(LocalPlayer.Character)
+    end
+end)
+
+
 local Players = game:GetService('Players')
 local RunService = game:GetService('RunService')
 local TeleportService = game:GetService('TeleportService')
