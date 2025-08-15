@@ -1,0 +1,392 @@
+-- LocalScript in StarterPlayerScripts
+local TARGET_GAME_ID = 10449761463
+if game.PlaceId ~= TARGET_GAME_ID then
+    return
+end
+
+local Players = game:GetService('Players')
+local RunService = game:GetService('RunService')
+local TeleportService = game:GetService('TeleportService')
+local LocalPlayer = Players.LocalPlayer
+
+-- Orbit / Hide variables
+local orbiting = false
+local targetPlayer = nil
+local radius = 4
+local yOffset = 1
+local angle = 0
+local orbitSpeed = 50
+local orbitDir = 1
+local hiding = false
+local lastOrbitState = false
+local hidePosition = Vector3.new(726.178, 684.193, 128.33)
+local savedPosition = nil
+local movementPrediction = 0.1 -- domyślna predykcja
+local predictionEnabled = true -- toggle dla predykcji
+
+-- Sounds
+local clickSoundId = 18755588842
+local enableSoundId = 100772509583336
+local disableSoundId = 74537898337038
+
+local function playSound(id)
+    local sound = Instance.new('Sound')
+    sound.SoundId = 'rbxassetid://' .. id
+    sound.Parent = LocalPlayer:WaitForChild('PlayerGui')
+    sound.Volume = 1
+    sound:Play()
+    game.Debris:AddItem(sound, 2)
+end
+
+-- Setup character
+local function setupCharacter(char)
+    LocalPlayer.Character = char
+    orbiting = false
+    targetPlayer = nil
+    lastOrbitState = false
+end
+
+-- Randomize orbit
+local function randomizeOrbit()
+    orbitDir = math.random(0, 1) == 0 and -1 or 1
+    orbitSpeed = math.random(30, 71)
+end
+
+-- Enable hide (teleport + full control)
+local function enableHide()
+    local char = LocalPlayer.Character
+    if not char then
+        return
+    end
+    local HRP = char:FindFirstChild('HumanoidRootPart')
+    if not HRP then
+        return
+    end
+
+    hiding = true
+    lastOrbitState = orbiting
+    orbiting = false
+    savedPosition = HRP.Position
+
+    HRP.CFrame = CFrame.new(hidePosition)
+
+    playSound(enableSoundId)
+    game.StarterGui:SetCore('SendNotification', {
+        Title = 'KolkolOrbit',
+        Text = 'You are now at hide position.',
+        Duration = 3,
+    })
+end
+
+-- Disable hide
+local function disableHide()
+    local char = LocalPlayer.Character
+    if not char then
+        return
+    end
+    local HRP = char:FindFirstChild('HumanoidRootPart')
+    if not HRP then
+        return
+    end
+
+    hiding = false
+    orbiting = lastOrbitState
+
+    HRP.CFrame = CFrame.new(savedPosition or HRP.Position)
+
+    playSound(disableSoundId)
+    game.StarterGui:SetCore('SendNotification', {
+        Title = 'KolkolOrbit',
+        Text = 'You are back.',
+        Duration = 3,
+    })
+end
+
+-- GUI
+local screenGui, mainFrame
+local function createGUI()
+    if screenGui then
+        screenGui:Destroy()
+    end
+    local PlayerGui = LocalPlayer:WaitForChild('PlayerGui')
+    screenGui = Instance.new('ScreenGui', PlayerGui)
+    screenGui.Name = 'KolkolOrbitMain'
+
+    mainFrame = Instance.new('Frame')
+    mainFrame.Size = UDim2.new(0, 220, 0, 540)
+    mainFrame.Position = UDim2.new(1, -230, 0.5, -270)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    mainFrame.BackgroundTransparency = 0.2
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+
+    -- Scroll frame for players
+    local scrollFrame = Instance.new('ScrollingFrame')
+    scrollFrame.Size = UDim2.new(1, -10, 0, 350)
+    scrollFrame.Position = UDim2.new(0, 5, 0, 5)
+    scrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scrollFrame.ScrollBarThickness = 6
+    scrollFrame.BackgroundTransparency = 1
+    scrollFrame.Parent = mainFrame
+
+    local listLayout = Instance.new('UIListLayout')
+    listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    listLayout.Padding = UDim.new(0, 5)
+    listLayout.Parent = scrollFrame
+
+    local playerButtons = {}
+    local function updatePlayerButtons()
+        for _, btn in pairs(playerButtons) do
+            btn:Destroy()
+        end
+        playerButtons = {}
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local btn = Instance.new('TextButton')
+                btn.Size = UDim2.new(1, 0, 0, 30)
+                btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+                btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                btn.Text = player.DisplayName .. ' (' .. player.Name .. ')'
+                btn.Parent = scrollFrame
+                btn.MouseButton1Click:Connect(function()
+                    if hiding then
+                        game.StarterGui:SetCore('SendNotification', {
+                            Title = 'KolkolOrbit',
+                            Text = "You can't orbit while hidden!",
+                            Duration = 3,
+                        })
+                        playSound(clickSoundId)
+                        return
+                    end
+                    targetPlayer = player
+                    orbiting = true
+                    playSound(clickSoundId)
+                    game.StarterGui:SetCore('SendNotification', {
+                        Title = 'KolkolOrbit',
+                        Text = 'Now orbiting ' .. player.Name,
+                        Duration = 3,
+                    })
+                end)
+                playerButtons[player] = btn
+            end
+        end
+        scrollFrame.CanvasSize =
+            UDim2.new(0, 0, 0, listLayout.AbsoluteContentSize.Y)
+    end
+    Players.PlayerAdded:Connect(updatePlayerButtons)
+    Players.PlayerRemoving:Connect(updatePlayerButtons)
+    updatePlayerButtons()
+
+    -- Stop Orbit
+    local stopBtn = Instance.new('TextButton')
+    stopBtn.Size = UDim2.new(1, -10, 0, 30)
+    stopBtn.Position = UDim2.new(0, 5, 1, -180)
+    stopBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    stopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    stopBtn.Text = 'Stop Orbit'
+    stopBtn.Parent = mainFrame
+    stopBtn.MouseButton1Click:Connect(function()
+        orbiting = false
+        targetPlayer = nil
+        playSound(clickSoundId)
+        game.StarterGui:SetCore('SendNotification', {
+            Title = 'KolkolOrbit',
+            Text = 'Orbit stopped.',
+            Duration = 3,
+        })
+    end)
+
+    -- Hide Toggle
+    local hideBtn = Instance.new('TextButton')
+    hideBtn.Size = UDim2.new(1, -10, 0, 30)
+    hideBtn.Position = UDim2.new(0, 5, 1, -140)
+    hideBtn.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    hideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    hideBtn.Text = 'Hide: OFF'
+    hideBtn.Parent = mainFrame
+    hideBtn.MouseButton1Click:Connect(function()
+        if hiding then
+            hideBtn.Text = 'Hide: OFF'
+            disableHide()
+        else
+            hideBtn.Text = 'Hide: ON'
+            enableHide()
+        end
+        playSound(clickSoundId)
+    end)
+
+    -- Server Hop
+    local serverHopBtn = Instance.new('TextButton')
+    serverHopBtn.Size = UDim2.new(1, -10, 0, 30)
+    serverHopBtn.Position = UDim2.new(0, 5, 1, -100)
+    serverHopBtn.BackgroundColor3 = Color3.fromRGB(50, 150, 250)
+    serverHopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    serverHopBtn.Text = 'Server Hop (long wait, may not work)'
+    serverHopBtn.Parent = mainFrame
+
+    local HttpService = game:GetService('HttpService')
+    local PlaceID = game.PlaceId
+    local AllIDs = {}
+    local foundAnything = ''
+    local actualHour = os.date('!*t').hour
+
+    -- Load previous servers
+    local File = pcall(function()
+        AllIDs = HttpService:JSONDecode(readfile('NotSameServers.json'))
+    end)
+    if not File then
+        table.insert(AllIDs, actualHour)
+        writefile('NotSameServers.json', HttpService:JSONEncode(AllIDs))
+    end
+
+    local function TPReturner()
+        local Site
+        if foundAnything == '' then
+            Site = HttpService:JSONDecode(
+                game:HttpGet(
+                    'https://games.roblox.com/v1/games/'
+                        .. PlaceID
+                        .. '/servers/Public?sortOrder=Asc&limit=100'
+                )
+            )
+        else
+            Site = HttpService:JSONDecode(
+                game:HttpGet(
+                    'https://games.roblox.com/v1/games/'
+                        .. PlaceID
+                        .. '/servers/Public?sortOrder=Asc&limit=100&cursor='
+                        .. foundAnything
+                )
+            )
+        end
+
+        if
+            Site.nextPageCursor
+            and Site.nextPageCursor ~= 'null'
+            and Site.nextPageCursor ~= nil
+        then
+            foundAnything = Site.nextPageCursor
+        end
+
+        for _, v in pairs(Site.data) do
+            local ID = tostring(v.id)
+            local currentPlayers = tonumber(v.playing)
+            local maxPlayers = tonumber(v.maxPlayers)
+            local fillPercent = currentPlayers / maxPlayers
+
+            -- Only choose servers 35%-80% full
+            if fillPercent >= 0.35 and fillPercent <= 0.8 then
+                local Possible = true
+                for _, Existing in pairs(AllIDs) do
+                    if ID == tostring(Existing) then
+                        Possible = false
+                        break
+                    end
+                end
+
+                if Possible then
+                    table.insert(AllIDs, ID)
+                    pcall(function()
+                        writefile(
+                            'NotSameServers.json',
+                            HttpService:JSONEncode(AllIDs)
+                        )
+                        game:GetService('TeleportService')
+                            :TeleportToPlaceInstance(
+                                PlaceID,
+                                ID,
+                                game.Players.LocalPlayer
+                            )
+                    end)
+                    wait(4)
+                    return -- stop after teleporting to avoid multiple hops
+                end
+            end
+        end
+    end
+
+    local function Teleport()
+        while wait() do
+            pcall(function()
+                TPReturner()
+                if foundAnything ~= '' then
+                    TPReturner()
+                end
+            end)
+        end
+    end
+
+    serverHopBtn.MouseButton1Click:Connect(function()
+        playSound(clickSoundId)
+        spawn(Teleport)
+    end)
+
+    -- Prediction Toggle
+    local predBtn = Instance.new('TextButton')
+    predBtn.Size = UDim2.new(1, -10, 0, 30)
+    predBtn.Position = UDim2.new(0, 5, 1, -60)
+    predBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    predBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    predBtn.Text = 'Prediction: ON'
+    predBtn.Parent = mainFrame
+    predBtn.MouseButton1Click:Connect(function()
+        predictionEnabled = not predictionEnabled
+        predBtn.Text = 'Prediction: ' .. (predictionEnabled and 'ON' or 'OFF')
+        playSound(clickSoundId)
+    end)
+end
+
+-- Orbit randomization
+task.spawn(function()
+    while true do
+        task.wait(math.random(1, 2))
+        randomizeOrbit()
+    end
+end)
+
+-- Main loop
+RunService.RenderStepped:Connect(function(delta)
+    local char = LocalPlayer.Character
+    if not char then
+        return
+    end
+    local HRP = char:FindFirstChild('HumanoidRootPart')
+    if not HRP then
+        return
+    end
+
+    -- Orbit
+    if
+        orbiting
+        and not hiding
+        and targetPlayer
+        and targetPlayer.Character
+        and targetPlayer.Character:FindFirstChild('HumanoidRootPart')
+    then
+        local targetHRP = targetPlayer.Character.HumanoidRootPart
+
+        -- Movement prediction toggle
+        local predictedPos = targetHRP.Position
+        if predictionEnabled then
+            predictedPos = predictedPos
+                + targetHRP.Velocity * movementPrediction
+        end
+
+        angle = angle + orbitSpeed * delta / radius * orbitDir
+        local offset = Vector3.new(
+            math.cos(angle) * radius,
+            yOffset,
+            math.sin(angle) * radius
+        )
+        HRP.CFrame = CFrame.new(predictedPos + offset, predictedPos)
+    end
+end)
+
+-- Character added
+LocalPlayer.CharacterAdded:Connect(function(char)
+    setupCharacter(char)
+    createGUI()
+end)
+
+-- Initial load
+createGUI()
